@@ -6,11 +6,13 @@ import { User } from './entities/user.entity';
 import { UserRepository } from './repositories/user.repository';
 import { IUserRepository } from './repositories/user.repository.interface';
 import { CacheModule } from '../shared/cache/cache.module';
+import { LoggerModule } from '../shared/logger/logger.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User]),
     CacheModule,
+    LoggerModule,
   ],
   controllers: [UserController],
   providers: [

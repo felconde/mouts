@@ -5,6 +5,7 @@ import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { IUserRepository } from '../repositories/user.repository.interface';
 import { ICacheService } from '../../shared/cache/cache.interface';
+import { LoggerService } from '../../shared/logger/logger.service';
 
 @Injectable()
 export class UserService {
@@ -14,11 +15,15 @@ export class UserService {
   constructor(
     @Inject('IUserRepository') private readonly userRepository: IUserRepository,
     @Inject('ICacheService') private readonly cacheService: ICacheService,
+    private readonly logger: LoggerService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<Omit<User, 'password'>> {
+    this.logger.log('Creating new user', 'USER_SERVICE', { email: createUserDto.email });
+
     const existingUser = await this.userRepository.findByEmail(createUserDto.email);
     if (existingUser) {
+      this.logger.warn('User creation failed: email already exists', 'USER_SERVICE', { email: createUserDto.email });
       throw new ConflictException('Email already exists');
     }
 
@@ -42,6 +47,10 @@ export class UserService {
     
     await this.cacheService.delete(`${this.CACHE_PREFIX}all`);
 
+    this.logger.log('User created successfully', 'USER_SERVICE', { userId: user.id, email: user.email });
+    this.logger.logCache('set', `${this.CACHE_PREFIX}${user.id}`);
+    this.logger.logCache('delete', `${this.CACHE_PREFIX}all`);
+
     return userWithoutPassword;
   }
 
@@ -50,12 +59,17 @@ export class UserService {
     
     let users = await this.cacheService.get<Omit<User, 'password'>[]>(cacheKey);
     if (!users) {
+      this.logger.logCache('miss', cacheKey);
       const usersWithPassword = await this.userRepository.findAll();
       // Remover senhas de todos os usuários
       users = usersWithPassword.map(({ password, ...user }) => user);
       await this.cacheService.set(cacheKey, users, this.CACHE_TTL);
+      this.logger.logCache('set', cacheKey);
+    } else {
+      this.logger.logCache('hit', cacheKey);
     }
 
+    this.logger.log('Retrieved all users', 'USER_SERVICE', { count: users.length });
     return users;
   }
 
